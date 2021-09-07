@@ -31,14 +31,33 @@
     <script src="/socket.io/socket.io.js"></script>
 
     <script>
-      const socket = io();
+      const socket = io({query:{username:"Chris"}});
+
       const usersInRoom = {};
-      const usersCloseBy = {};
       const messages = document.getElementById('messages');
       const form = document.getElementById('form');
       const input = document.getElementById('input');
       const room = document.getElementById("room");
-
+      const makeNode = (position) =>{
+        const userNode = document.createElement("div");
+        usersInRoom[position.user_id] = {
+          user_id:position.user_id,
+          x:position.x,
+          y:position.y,
+          username:position.username,
+          userNode
+        }
+        userNode.style.position = "absolute";
+        const xOffset = room.clientWidth*position.x/100;
+        const yOffset = room.clientHeight*position.y/100;
+        userNode.style.top = `${yOffset}px`;
+        userNode.style.left = `${xOffset}px`;
+        userNode.style.width = "5px";
+        userNode.style.height = "5px";
+        userNode.style.backgroundColor = "black";
+        room.appendChild(userNode);
+        return userNode;
+      };
       form.addEventListener('submit', function(e) {
         e.preventDefault();
         if (input.value) {
@@ -90,46 +109,41 @@
           }
         }
       })
-      const makeNode = (position) =>{
-        const userNode = document.createElement("div");
-        usersInRoom[position.user_id] = {
-          x:position.x,
-          y:position.y,
-          username:position.username,
-          userNode
-        }
-        userNode.style.position = "absolute";
-        userNode.style.top = position.y;
-        userNode.style.right = position.x;
-        userNode.style.width = "5px";
-        userNode.style.height = "5px";
-        userNode.style.backgroundColor = "black";
-        room.appendChild(userNode);
-        return userNode;
-      };
+
+      socket.onAny((event, ...args) => {
+        console.log(event, args);
+      });
       socket.on("initial self position",function(position){
         const userNode = makeNode(position);
       });
       socket.on("position", function(position){
         let userNode;
         if(usersInRoom[position.user_id]){
-          userNode = usersInRoom[position.user_id].node;
-          userNode.style.top = position.y;
-          userNode.style.right = position.x;
+          const user = usersInRoom[position.user_id];
+          userNode = user.userNode;
+          const xOffset = room.clientWidth*position.x/100;
+          const yOffset = room.clientHeight*position.y/100;
+          userNode.style.top = `${yOffset}px`;
+          userNode.style.left = `${xOffset}px`;
+          user.x = position.x,
+          user.y = position.y
         }
         else{
           userNode = makeNode(position);
         }
-        const self = usersInRoom[socket.id];
-        const isInRange = Math.sqrt(Math.pow(self.x-position.x,2)+Math.pow(self.y-position.y,2));
-
-        if(usersInRoom[position.user_id].isInRange !== isInRange){
-          if(isInRange){
-            socket.emit("join user",position.user_id);
+        if(socket.id !== position.user_id){
+          const self = usersInRoom[socket.id];
+          const isInRange = Math.sqrt(Math.pow(self.x-position.x,2)+Math.pow(self.y-position.y,2));
+          
+          if(usersInRoom[position.user_id].isInRange !== isInRange){
+            if(isInRange){
+              socket.emit("join user",position.user_id);
+            }
+            else{
+              socket.emit("leave user",position.user_id);
+            }
           }
-          else{
-            socket.emit("leave user",position.user_id);
-          }
+          usersInRoom[position.user_id].isInRange = isInRange;
         }
       });
       socket.on("user disconnected",function(position){
