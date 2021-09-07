@@ -13,21 +13,31 @@
       #messages { list-style-type: none; margin: 0; padding: 0; }
       #messages > li { padding: 0.5rem 1rem; }
       #messages > li:nth-child(odd) { background: #efefef; }
+      #room { width: 50vw; height: 100vh;background-color: #f0e7bb;}
     </style>
   </head>
   <body>
-    <ul id="messages"></ul>
-    <form id="form" action="">
-      <input id="input" autocomplete="off" /><button>Send</button>
-    </form>
+    <div id="container">
+      <section>
+        <ul id="messages"></ul>
+        <form id="form" action="">
+          <input id="input" autocomplete="off" /><button>Send</button>
+        </form>
+      </section>
+      <section>
+        <div id="room"></div>
+      </section>
+    </div>
     <script src="/socket.io/socket.io.js"></script>
 
     <script>
-      var socket = io();
-
-      var messages = document.getElementById('messages');
-      var form = document.getElementById('form');
-      var input = document.getElementById('input');
+      const socket = io();
+      const usersInRoom = {};
+      const usersCloseBy = {};
+      const messages = document.getElementById('messages');
+      const form = document.getElementById('form');
+      const input = document.getElementById('input');
+      const room = document.getElementById("room");
 
       form.addEventListener('submit', function(e) {
         e.preventDefault();
@@ -36,7 +46,99 @@
           input.value = '';
         }
       });
+      document.addEventListener("keydown",function(e){
+        if(input !== document.activeElement){
+          if(e.key === "w"){
+            const self = usersInRoom[socket.id];
+            socket.volatile.emit("position",{
+              user_id:self.user_id,
+              username:self.username,
+              room_id:"",
+              x:self.x,
+              y:self.y-5
+            });
+          }
+          if(e.key === "s"){
+            const self = usersInRoom[socket.id];
+            socket.volatile.emit("position",{
+              user_id:self.user_id,
+              username:self.username,
+              room_id:"",
+              x:self.x,
+              y:self.y+5
+            });
+          }
+          if(e.key === "a"){
+            const self = usersInRoom[socket.id];
+            socket.volatile.emit("position",{
+              user_id:self.user_id,
+              username:self.username,
+              room_id:"",
+              x:self.x-5,
+              y:self.y
+            });
+          }
+          if(e.key === "d"){
+            const self = usersInRoom[socket.id];
+            socket.volatile.emit("position",{
+              user_id:self.user_id,
+              username:self.username,
+              room_id:"",
+              x:self.x+5,
+              y:self.y
+            });
+          }
+        }
+      })
+      const makeNode = (position) =>{
+        const userNode = document.createElement("div");
+        usersInRoom[position.user_id] = {
+          x:position.x,
+          y:position.y,
+          username:position.username,
+          userNode
+        }
+        userNode.style.position = "absolute";
+        userNode.style.top = position.y;
+        userNode.style.right = position.x;
+        userNode.style.width = "5px";
+        userNode.style.height = "5px";
+        userNode.style.backgroundColor = "black";
+        room.appendChild(userNode);
+        return userNode;
+      };
+      socket.on("initial self position",function(position){
+        const userNode = makeNode(position);
+      });
+      socket.on("position", function(position){
+        let userNode;
+        if(usersInRoom[position.user_id]){
+          userNode = usersInRoom[position.user_id].node;
+          userNode.style.top = position.y;
+          userNode.style.right = position.x;
+        }
+        else{
+          userNode = makeNode(position);
+        }
+        const self = usersInRoom[socket.id];
+        const isInRange = Math.sqrt(Math.pow(self.x-position.x,2)+Math.pow(self.y-position.y,2));
 
+        if(usersInRoom[position.user_id].isInRange !== isInRange){
+          if(isInRange){
+            socket.emit("join user",position.user_id);
+          }
+          else{
+            socket.emit("leave user",position.user_id);
+          }
+        }
+      });
+      socket.on("user disconnected",function(position){
+        const user = usersInRoom[position.user_id];
+        if(user){
+          room.removeChild(user);
+          delete user;
+        }
+      });
       socket.on('chat message', function(msg) {
         var item = document.createElement('li');
         item.textContent = msg;
